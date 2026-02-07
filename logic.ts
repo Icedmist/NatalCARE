@@ -3,7 +3,7 @@
  * FILE: LogicCore.ts
  * AUTHOR: Nasir Ibrahim Imam (System Architect)
  * UPDATED: Added Offline Patient Registration & ID Generation
- */
+ */ 
 
 import 'react-native-get-random-values';
 import { v4 as uuidv4 } from 'uuid'; // Standard library for unique IDs
@@ -124,6 +124,138 @@ export async function assessPatientRisk(vitals: PatientVitals): Promise<Assessme
   if (vitals.fetalHeartRate < THRESHOLDS.FHR_LOW || vitals.fetalHeartRate > THRESHOLDS.FHR_HIGH) {
     riskScore += 30;
     reasons.push(`Abnormal Fetal Heart Rate: ${vitals.fetalHeartRate}`);
+  }
+
+  // Generate Result
+  if (riskScore >= 50) {
+    return { riskLevel: 'CRITICAL', uiColor: '#FF0000', action: "EMERGENCY: TRANSPORT NOW", reasoning: reasons };
+  } else if (riskScore >= 20) {
+    return { riskLevel: 'HIGH', uiColor: '#FFA500', action: "REFERRAL: Monitor & Prepare", reasoning: reasons };
+  } else if (riskScore >= 10) {
+    return { riskLevel: 'MEDIUM', uiColor: '#FFFF00', action: "WARNING: Re-check in 4hrs", reasoning: reasons };
+  } else {
+    return { riskLevel: 'LOW', uiColor: '#008000', action: "STABLE", reasoning: ["Normal limits"] };
+  }
+}
+
+// 4. GESTATIONAL AGE CALCULATION (New Module)
+
+/**
+ * Calculates gestational age in weeks from LMP
+ */
+export function calculateGestationalAge(lmp: Date): number {
+  const now = new Date();
+  const diffTime = now.getTime() - lmp.getTime();
+  const diffDays = diffTime / (1000 * 3600 * 24);
+  return Math.floor(diffDays / 7);
+}
+
+// 5. SYMPTOM ASSESSMENT (Expanded Module)
+
+/**
+ * Assesses risk based on reported symptoms
+ */
+function assessSymptoms(symptoms: string[]): { score: number, reasons: string[] } {
+  let score = 0;
+  let reasons: string[] = [];
+
+  const criticalSymptoms = ['severe headache', 'blurred vision', 'epigastric pain', 'convulsions'];
+  const highSymptoms = ['headache', 'nausea', 'swelling', 'fatigue'];
+
+  symptoms.forEach(symptom => {
+    const lowerSymptom = symptom.toLowerCase();
+    if (criticalSymptoms.includes(lowerSymptom)) {
+      score += 30;
+      reasons.push(`Critical symptom: ${symptom}`);
+    } else if (highSymptoms.includes(lowerSymptom)) {
+      score += 10;
+      reasons.push(`Concerning symptom: ${symptom}`);
+    }
+  });
+
+  return { score, reasons };
+}
+
+// 6. FOLLOW-UP SCHEDULING (New Module)
+
+interface FollowUp {
+  patientId: string;
+  nextVisit: Date;
+  reason: string;
+}
+
+/**
+ * Schedules follow-up based on risk level
+ */
+export function scheduleFollowUp(patientId: string, riskLevel: string, lastVisit: Date): FollowUp {
+  let daysToAdd = 0;
+  let reason = '';
+
+  switch (riskLevel) {
+    case 'CRITICAL':
+      daysToAdd = 1;
+      reason = 'Emergency follow-up';
+      break;
+    case 'HIGH':
+      daysToAdd = 3;
+      reason = 'High-risk monitoring';
+      break;
+    case 'MEDIUM':
+      daysToAdd = 7;
+      reason = 'Regular check-up';
+      break;
+    case 'LOW':
+      daysToAdd = 14;
+      reason = 'Routine visit';
+      break;
+    default:
+      daysToAdd = 14;
+      reason = 'Standard follow-up';
+  }
+
+  const nextVisit = new Date(lastVisit);
+  nextVisit.setDate(nextVisit.getDate() + daysToAdd);
+
+  return { patientId, nextVisit, reason };
+}
+
+// 7. ENHANCED ASSESSMENT (Updated Module)
+
+/**
+ * Enhanced patient risk assessment including symptoms
+ */
+export async function assessPatientRiskEnhanced(vitals: PatientVitals, gestationalAge: number): Promise<AssessmentResult> {
+  let riskScore = 0;
+  let reasons: string[] = [];
+
+  // Existing BP and FHR logic
+  if (vitals.systolicBP >= THRESHOLDS.BP_CRITICAL_SYS || vitals.diastolicBP >= THRESHOLDS.BP_CRITICAL_DIA) {
+    riskScore += 50;
+    reasons.push("Severe Hypertension detected");
+  } else if (vitals.systolicBP >= THRESHOLDS.BP_HIGH_SYS || vitals.diastolicBP >= THRESHOLDS.BP_HIGH_DIA) {
+    riskScore += 20;
+    reasons.push("Hypertension detected");
+  }
+
+  if (riskScore >= 20 && vitals.proteinuria > 1) {
+    riskScore += 40;
+    reasons.push("Potential Preeclampsia (BP + Protein)");
+  }
+
+  if (vitals.fetalHeartRate < THRESHOLDS.FHR_LOW || vitals.fetalHeartRate > THRESHOLDS.FHR_HIGH) {
+    riskScore += 30;
+    reasons.push(`Abnormal Fetal Heart Rate: ${vitals.fetalHeartRate}`);
+  }
+
+  // New: Symptom assessment
+  const symptomAssessment = assessSymptoms(vitals.symptoms);
+  riskScore += symptomAssessment.score;
+  reasons.push(...symptomAssessment.reasons);
+
+  // New: Gestational age considerations
+  if (gestationalAge < 12 || gestationalAge > 42) {
+    riskScore += 20;
+    reasons.push(`Extreme gestational age: ${gestationalAge} weeks`);
   }
 
   // Generate Result
